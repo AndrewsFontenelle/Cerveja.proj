@@ -1,0 +1,209 @@
+---
+title: "Relatório"
+author: "Andrews HIlder Fontenelle Leão"
+date: "21/04/2021"
+output: html_document
+---
+
+# Carregar pacotes
+
+```{r Pacotes, warning=FALSE, message=FALSE}
+library(readxl)
+library(dplyr)
+library(rmarkdown)
+library(carData)
+library(car)
+library(ggplot2)
+library(corrplot)
+library(lmtest)
+library(psych)
+library(vegan)
+```
+## Importar banco de dados
+Os dados foram importados usando a função "read_excel" e logo após serem importados, foram verificados a partir da função "glimpse" que apresenta um resumo dos dados importados
+```{r Carregamento do Banco de dados}
+cerveja2_0 <- read_excel("C:/Users/andre/Desktop/cerveja2.0.xlsx", 
+    na = "NA")
+
+glimpse(cerveja2_0) 
+```
+## Leitura e visualização do banco de dados
+Com os dados em mãos, é possível observar as colunas presentes, que representam as seguintes variáveis:
+  Mês
+  Data: com valores de: dia, mês e ano
+  Tmed: Temperatura média
+  Tmin: Temperatura mínima
+  Tmax: Temperatura máxima
+  Sprec:Precipitação diária
+  Dia:  Dia útil ou fim de semana
+  CC:   consumo de cerveja
+```{r}
+paged_table(cerveja2_0)
+```
+### Com os dados em mãos, algumas hipóteses foram formuladas. 
+Será que a variável dia (final de semana e dia útil) influencia na variável CC (consumo de cerveja), para responder a esta pergunta, foi realizado um teste T, com o intuíto de verificar possíveis diferenças entre os dois grupos (dias úteis e final de semana).
+
+## Teste T
+ Na primeira etapa do teste, foi divido os dados em úteis (dias úteis) e FDS (final de semana), a partir da função "summary" 
+```{r}
+summary(cerveja2_0$dia=="úteis")
+summary(cerveja2_0$dia=="FDS")
+```
+
+Com os dados separados, partiu-se para a normalidade com o Shapiro teste, que apresenta se os dados seguem uma distribuição normal a partir. 
+A partir da observação do valor de p (>0,05), aceita-se a hipótese nula, de que os dados são normais
+```{r}
+shapiro.test(cerveja2_0$CC[cerveja2_0$dia=="úteis"])
+shapiro.test(cerveja2_0$CC[cerveja2_0$dia=="FDS"])
+```
+Sabendo que os dados são normais, segue-se para o teste T em si, nele observa-se que o valor de p foi significativo (p<0,04), ou seja, a hipótese alternativa foi confirmada, existe diferença no consumo de cerveja entre fim de semana e dia útil. Sendo o final de semana o que possui o maior consumo (vide o gráfico a seguir)
+```{r}
+t.test(cerveja2_0$CC~cerveja2_0$dia, var.equal=T)
+
+par(mfrow=c(1,1))
+boxplot(cerveja2_0$CC~cerveja2_0$dia, ylab = "Consumo de cerveja (l)", xlab = "Dia da semana")
+```
+Além da hipótese do fim de semana e dia útil, outra hipótese foi levantada. Qual das variáveis, restantes, imprime mais influência sob o consumo de cerveja. 
+Para responder isso, foi realizado primeiro uma correlação, para verificar o quanto as variáveis em questão estavam associadas, inclusive com o consumo de cerveja
+ 
+## Correlação
+### Adicionar valores de média e inserir em células vazias 
+Primeiro, foram corrigidas falhas na base de dados, preenchendo áreas vazias e retirando possíveis valores muito discrepantes (outlier) (esses valores foram substituídos pela média da coluna)
+```{r, warning=FALSE,message=FALSE}
+cerveja2_0$Tmed[which(cerveja2_0$Tmed == "52.86")]<-"21.12"
+cerveja2_0$Tmed[which(is.na(cerveja2_0$Tmed))]<-"21.12"
+cerveja2_0$Tmin[which(is.na(cerveja2_0$Tmin))]<-"17.47"
+cerveja2_0$Tmax[which(is.na(cerveja2_0$Tmax))]<-"26.61"
+cerveja2_0$Tmed<- as.double(cerveja2_0$Tmed)
+cerveja2_0$Tmax<- as.double(cerveja2_0$Tmax)
+cerveja2_0$Tmin<- as.double(cerveja2_0$Tmin)
+```
+### Log
+Para tentar corrigir a anormalidade dos dados e reduzir os outliers, foi feito um log das variáveis numéricas
+```{r, warning=FALSE}
+cerveja <- decostand(cerveja2_0[,c(3,4,5,6,8)],"log") 
+head (cerveja)  
+```
+### Normalidade
+Novamente foi realizado o Shapiro teste, porém, os valores de p foram menores que 0,05, apresentando uma distribuição não normal
+```{r}
+shapiro.test(cerveja$Tmed)
+shapiro.test(cerveja$Tmin)
+shapiro.test(cerveja$Tmax)
+shapiro.test(cerveja$Sprec)
+shapiro.test(cerveja$CC)
+```
+### Presença de Outliers
+Foram gerados gráficos de boxplot para verificar a presença ou não de outliers, onde foram vistos poucos destes
+```{r}
+boxplot(cerveja$Tmed)
+boxplot(cerveja$Tmin)
+boxplot(cerveja$Tmax)
+boxplot(cerveja$Sprec)
+boxplot(cerveja$CC)
+```
+### Construção do modelo
+O modelo foi construído para verificar se possuem homocedasticidade
+```{r}
+mod_reg1 <- lm(Tmed ~ Tmin, cerveja)
+mod_reg2 <- lm(Tmed ~ Tmax, cerveja)
+mod_reg3 <- lm(Tmed ~ Sprec, cerveja)
+mod_reg4 <- lm(Tmed ~ CC, cerveja)
+
+mod_reg5 <- lm(Tmin ~ Tmax, cerveja)
+mod_reg6 <- lm(Tmin ~ Sprec, cerveja)
+mod_reg7 <- lm(Tmin ~ CC, cerveja)
+
+mod_reg8 <- lm(Tmax ~ Sprec, cerveja)
+mod_reg9 <- lm(Tmax ~ CC, cerveja)
+
+mod_reg10 <- lm(Sprec ~ CC, cerveja)
+```
+
+### Análise gráfica
+A homocedasticidade, foi observada no gráfico, no geral seguiram o pressuposto apresentando os resíduos distribuídos uniformemente 
+```{r,warning=FALSE,message=FALSE, }
+par(mfrow=c(1,2))
+plot(mod_reg1, which=c(1,3))
+plot(mod_reg2, which=c(1,3))
+plot(mod_reg3, which=c(1,3))
+plot(mod_reg4, which=c(1,3))
+plot(mod_reg5, which=c(1,3))
+plot(mod_reg6, which=c(1,3))
+plot(mod_reg7, which=c(1,3))
+plot(mod_reg8, which=c(1,3))
+plot(mod_reg9, which=c(1,3))
+plot(mod_reg10, which=c(1,3))
+par(mfrow=c(1,1))
+```
+Apesar de ter atendido os pressupostos da homocedasticidade, os dados não eram normais, por essa razão foi utilizado a correlação de spearman
+### Correlação de Spearman 
+Nesta, todos os valores apresentaram-se significativos, com excessão da temperatura média correlacionada à precipitação
+```{r, warning=FALSE, message=FALSE}
+cor.test(cerveja$Tmed,cerveja$CC, method = "spearman")
+cor.test(cerveja$Tmax,cerveja$CC, method = "spearman")
+cor.test(cerveja$Tmin,cerveja$CC, method = "spearman")
+cor.test(cerveja$Sprec,cerveja$CC, method = "spearman")
+
+cor.test(cerveja$Tmed,cerveja$Tmin, method = "spearman")
+cor.test(cerveja$Tmed,cerveja$Tmax, method = "spearman")
+cor.test(cerveja$Tmed,cerveja$Sprec, method = "spearman")
+
+cor.test(cerveja$Tmin,cerveja$Tmax, method = "spearman")
+cor.test(cerveja$Tmin,cerveja$Sprec, method = "spearman")
+
+cor.test(cerveja$Tmax,cerveja$Sprec, method = "spearman")
+```
+### Matriz de correlação
+A partir deste gráfico foi possível observar a correlação das variáveis, umas com as outras, onde apresentou alta correlação entre as temperaturas máxima e média; e alta correlação entre temperatura máxima e consumo de cerveja. A partir destes resultados, foram escolhidas as variáveis temperatura máxima e miníma para a regressção com o consumo de cerveja. Apesar destas temperaturas serem correlatas, possuem bastante relevância sob o consumo de cerveja
+```{r}
+pairs.panels(cerveja[,c(1,2,3,4,5)])
+```
+# Regressão
+### Construção do modelo
+O modelo foi construído, utilizando as variáveis temperatura máxima e mínima como independentes e consumo de cerveja como dependente
+```{r}
+mod <- lm(CC ~ Tmax + Tmin,data=cerveja)
+```
+
+### Análise gráfica
+Foram observadas: linearidade;resíduos com distribuição, aparentemente normal;apresenta homocedasticidade; e poucos outliers.
+```{r}
+par(mfrow=c(2,2))
+
+plot(mod)
+
+par(mfrow=c(1,1))
+```
+### Normalidade dos resíduos
+Apesar de não apresentar normalidade, o teste atendeu a outros requisitos e por esse motivo a regressão foi continuada 
+```{r}
+shapiro.test(mod$residuals)
+```
+
+### Outliers resíduos
+Foram observados os intervalos dos resíduos
+```{r}
+summary(rstandard(mod))
+```
+
+### Homocedasticidade (Breusch-Pagan):
+O valor de p > 0,05 corrobora para a hipótese nula do teste, ou seja, nos dados há homocedasticidade
+```{r}
+bptest(mod)
+```
+
+### Multicolinearidade
+Os dados apresentaram valores abaixo do ponto de corte (10), ou seja não apresentam multicolinearidade
+```{r}
+vif(mod)
+```
+
+### Análise do modelo
+Dentros dos resultados da regressão, foi observado que a temperatura máxima influi sob o consumo de cerveja de maneira positiva. A cada dia a temperatura influencia positivamente sob o consumo de cerveja em 0,71. Além disso o R² ajustado explica, neste modelo, 42% da variação deste modelo.
+```{r}
+summary(mod)
+```
+
+Com isso, conclui-se que o consumo de cerveja é influenciado, principalmente pelas variáveis Temperatura máxima e Final de Semana. Tendo relação direta com o consumo de cerveja.
+
